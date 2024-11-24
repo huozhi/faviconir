@@ -21,10 +21,6 @@ export default function Faviconir() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>('svg')
   const [positions, setPositions] = useState<Array<{x: number, y: number, size: number}>>([])
 
-  const generateRandomPosition = (size: number, max: number) => {
-    return Math.floor(Math.random() * (max - size))
-  }
-
 
   const generateBackgroundColor = () => {
     const hue = Math.floor(Math.random() * 360)
@@ -130,10 +126,6 @@ export default function Faviconir() {
     setBackgroundColor(generateBackgroundColor())
     setUseBackground(Math.random() > 0.5)
     setPositions(generatePositions(itemCount))
-  }
-
-  const regenerateBackground = () => {
-    setBackgroundColor(generateBackgroundColor())
   }
 
   useEffect(() => {
