@@ -84,7 +84,7 @@ export default function Faviconir() {
       const url = URL.createObjectURL(svgBlob)
       const link = document.createElement('a')
       link.href = url
-      link.download = 'favicon.svg'
+      link.download = 'icon.svg'
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
