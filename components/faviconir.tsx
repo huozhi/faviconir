@@ -6,10 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Github } from 'lucide-react'
+import { Github, Circle, Square } from 'lucide-react'
 
 type Shape = 'circle' | 'triangle' | 'square'
 type DownloadFormat = 'svg' | 'ico'
+type BackgroundShape = 'circle' | 'square'
+
 
 export default function Faviconir() {
   const [itemCount, setItemCount] = useState(3)
@@ -20,6 +22,7 @@ export default function Faviconir() {
   const [faviconContent, setFaviconContent] = useState<string>('')
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>('svg')
   const [positions, setPositions] = useState<Array<{ x: number; y: number; size: number }>>([])
+  const [backgroundShape, setBackgroundShape] = useState<BackgroundShape>('square')
 
   const generateBackgroundColor = () => {
     const hue = Math.floor(Math.random() * 360)
@@ -62,7 +65,11 @@ export default function Faviconir() {
     let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">`
 
     if (useBackground) {
-      svgContent += `<rect width="64" height="64" fill="${backgroundColor}" />`
+      if (backgroundShape === 'circle') {
+        svgContent += `<circle cx="32" cy="32" r="32" fill="${backgroundColor}" />`
+      } else {
+        svgContent += `<rect width="64" height="64" fill="${backgroundColor}" />`
+      }
     } else {
       svgContent += `<rect width="64" height="64" fill="transparent" />`
     }
@@ -75,7 +82,7 @@ export default function Faviconir() {
 
     svgContent += '</svg>'
     setFaviconContent(svgContent)
-  }, [positions, shape, colorTheme, backgroundColor, useBackground])
+  }, [positions, shape, colorTheme, backgroundColor, useBackground, backgroundShape])
 
   const downloadFavicon = useCallback(() => {
     if (downloadFormat === 'svg') {
@@ -124,6 +131,7 @@ export default function Faviconir() {
     setColorTheme(newTheme)
     setBackgroundColor(generateBackgroundColor())
     setUseBackground(Math.random() > 0.5)
+    setBackgroundShape(Math.random() > 0.5 ? 'circle' : 'square')
     setPositions(generatePositions(itemCount))
   }
 
@@ -145,7 +153,8 @@ export default function Faviconir() {
 
   useEffect(() => {
     drawFavicon()
-  }, [drawFavicon, itemCount, shape, colorTheme, backgroundColor, useBackground])
+  }, [drawFavicon, itemCount, shape, colorTheme, backgroundColor, useBackground, backgroundShape])
+
 
   const svgString = encodeURIComponent(faviconContent)
 
@@ -233,6 +242,13 @@ export default function Faviconir() {
                     </Label>
                     <div className="flex items-center gap-2">
                       <button
+                        className="w-8 h-8 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FFB300] border border-[#5D4037] flex items-center justify-center"
+                        onClick={() => setBackgroundShape(backgroundShape === 'square' ? 'circle' : 'square')}
+                        aria-label={`Toggle background shape: ${backgroundShape === 'square' ? 'Circle' : 'Square'}`}
+                      >
+                        {backgroundShape === 'square' ? <Square className="w-5 h-5 text-[#5D4037]" /> : <Circle className="w-5 h-5 text-[#5D4037]" />}
+                      </button>
+                      <button
                         className="w-6 h-6 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FFB300] border border-white"
                         style={{ backgroundColor: backgroundColor }}
                         onClick={regenerateBackgroundColor}
@@ -291,7 +307,7 @@ export default function Faviconir() {
                   dangerouslySetInnerHTML={{
                     __html: faviconContent.replace('width="64" height="64"', 'width="256" height="256"'),
                   }}
-                  className="w-full h-full"
+                  className="w-full h-full bg-white"
                 />
               </div>
             </div>
