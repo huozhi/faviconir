@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "faviconir",
-  description: "Generate favicons for your website",
+  description: "The designer of your icon",
 };
 
 export default function RootLayout({
