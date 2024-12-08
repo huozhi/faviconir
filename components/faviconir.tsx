@@ -73,7 +73,9 @@ export default function Faviconir() {
       case 'square':
         return `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${color}" />`
       case 'emoji':
-        return `<text x="${x + size / 2}" y="${y + size / 2}" font-size="${size}" text-anchor="middle" dominant-baseline="central" transform="rotate(${angle}, ${x + size / 2}, ${y + size / 2})">${emoji}</text>`
+        // Encode the emoji for use in SVG
+        const encodedEmoji = emoji.codePointAt(0).toString(16);
+        return `<text x="${x + size / 2}" y="${y + size / 2}" font-size="${size}" text-anchor="middle" dominant-baseline="central" transform="rotate(${angle}, ${x + size / 2}, ${y + size / 2})">&#x${encodedEmoji};</text>`
     }
   }
 
@@ -131,7 +133,8 @@ export default function Faviconir() {
   }, []);
 
   const downloadFavicon = useCallback(() => {
-    console.log('Download initiated');
+    if (!faviconContent) return;
+
     if (downloadFormat === 'svg') {
       const svgBlob = new Blob([faviconContent], { type: 'image/svg+xml;charset=utf-8' })
       const url = URL.createObjectURL(svgBlob)
@@ -151,14 +154,54 @@ export default function Faviconir() {
       img.onload = () => {
         ctx.drawImage(img, 0, 0, 16, 16)
         canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement('a')
-          link.href = url
-          link.download = 'favicon.ico'
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-          URL.revokeObjectURL(url)
+          if (blob) {
+            blob.arrayBuffer().then((buffer) => {
+              const icoData = new Uint8Array(buffer.byteLength + 22);
+              const icoView = new DataView(icoData.buffer);
+
+              // ICO header
+              icoView.setUint16(0, 0, true); // Reserved. Must always be 0.
+              icoView.setUint16(2, 1, true); // Specifies image type: 1 for icon (.ICO) image
+              icoView.setUint16(4, 1, true); // Specifies number of images in the file.
+
+              // Image entry
+              icoView.setUint8(6, 16); // Width of the image
+              icoView.setUint8(7, 16); // Height of the image
+              icoView.setUint8(8, 0);  // Number of colors in the color palette
+              icoView.setUint8(9, 0);  // Reserved. Should be 0.
+              icoView.setUint16(10, 1, true); // Color planes
+              icoView.setUint16(12, 32, true); // Bits per pixel
+              icoView.setUint32(14, buffer.byteLength, true); // Size of the image data
+              icoView.setUint32(18, 22, true); // Offset of the image data from the beginning of the file
+
+              // Copy the PNG data
+              icoData.set(new Uint8Array(buffer), 22);
+
+              const icoBlob = new Blob([icoData], { type: 'image/x-icon' });
+              const url = URL.createObjectURL(icoBlob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = 'favicon.ico'
+              document.body.appendChild(link)
+              link.click()
+              document.body.removeChild(link)
+              URL.revokeObjectURL(url)
+            }).catch(error => {
+              console.error('Error creating ICO file:', error);
+              toast({
+                title: "Error",
+                description: "Failed to create ICO file. Please try again.",
+                duration: 3000,
+              });
+            });
+          } else {
+            console.error('Failed to create blob from canvas');
+            toast({
+              title: "Error",
+              description: "Failed to create ICO file. Please try again.",
+              duration: 3000,
+            });
+          }
         }, 'image/png')
       }
       img.src = 'data:image/svg+xml;base64,' + btoa(faviconContent)
@@ -207,6 +250,7 @@ export default function Faviconir() {
 
   useEffect(() => {
     const newSvgContent = drawFavicon()
+    setFaviconContent(newSvgContent)
     updatePageFavicon(newSvgContent)
   }, [drawFavicon, updatePageFavicon])
 
@@ -249,7 +293,7 @@ export default function Faviconir() {
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-4xl font-bold text-[#5D4037]">Faviconir</h1>
           <a
-            href="https://github.com/yourusername/faviconir"
+            href="https://github.com/huozhi/faviconir"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#5D4037] hover:text-[#3E2723]"
