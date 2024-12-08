@@ -4,6 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "faviconir",
   description: "The designer of your icon",
+  twitter: {
+    site: '@huozhi',
+    creator: '@huozhi',
+  }
 };
 
 export default function RootLayout({
