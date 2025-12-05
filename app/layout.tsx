@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "faviconir",
   description: "The designer of your icon",
+    generator: 'v0.app'
 };
 
 export default function RootLayout({
