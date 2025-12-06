@@ -37,10 +37,6 @@ export default function Faviconir() {
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const emojiSelectorRef = useRef<HTMLDivElement>(null);
 
-  const generateRandomPosition = (size: number, max: number) => {
-    return Math.floor(Math.random() * (max - size))
-  }
-
   const generateShaderLayers = useCallback(() => {
     const count = 6;
     const layers = [];
@@ -66,11 +62,6 @@ export default function Faviconir() {
     }
     return layers;
   }, []);
-
-  const generateBackgroundColor = () => {
-    const hue = Math.floor(Math.random() * 360)
-    return `hsl(${hue}, 0%, 95%)` // Tech minimal: very light gray
-  }
 
   const generatePositions = useCallback((count: number) => {
     if (count === 1 && shape === 'emoji') {
