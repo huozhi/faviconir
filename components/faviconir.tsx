@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Github, Circle, Square, X, Download } from 'lucide-react'
+import { Github, Circle, Square, X, Download, Zap } from 'lucide-react'
 import { HexColorPicker } from "react-colorful"
 import { toast } from "@/hooks/use-toast"
 
-type Shape = 'emoji' | 'circle' | 'square'
+type Shape = 'emoji' | 'circle' | 'shader'
 type DownloadFormat = 'svg' | 'ico'
 type ClipPath = 'none' | 'circle' | 'square'
 
@@ -17,11 +17,11 @@ const emojiOptions = ['😊', '🚀', '🌈', '🎉', '🔥', '💡', '🌟', '�
 
 export default function Faviconir() {
   const [itemCount, setItemCount] = useState(3)
-  const [shape, setShape] = useState<Shape>('circle')
+  const [shape, setShape] = useState<Shape>('shader')
   const [colorTheme, setColorTheme] = useState<{ [key: number]: string }>({
-    0: '',
-    1: '',
-    2: '' // This will be used for the background color
+    0: '#000000',
+    1: '#666666',
+    2: '#ffffff' // Background
   })
   const [faviconContent, setFaviconContent] = useState<string>('')
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>('svg')
@@ -29,10 +29,11 @@ export default function Faviconir() {
   const [selectedEmoji, setSelectedEmoji] = useState<string>('😊');
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [clipPath, setClipPath] = useState<ClipPath>('circle');
-  const [colorPickerType, setColorPickerType] = useState<'theme'>('theme');
   const [colorPickerIndex, setColorPickerIndex] = useState(0);
   const [emojiSelectorOpen, setEmojiSelectorOpen] = useState(false);
+  const [emojiFilter, setEmojiFilter] = useState(true);
   const [customEmoji, setCustomEmoji] = useState('');
+  const [shaderLayers, setShaderLayers] = useState<Array<{x: number, y: number, size: number, color: string}>>([]);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const emojiSelectorRef = useRef<HTMLDivElement>(null);
 
@@ -40,18 +41,35 @@ export default function Faviconir() {
     return Math.floor(Math.random() * (max - size))
   }
 
+  const generateShaderLayers = useCallback(() => {
+    const count = 6;
+    const layers = [];
+    // Base hue to ensure some harmony, but wide variance for interest
+    const baseHue = Math.floor(Math.random() * 360);
+    
+    for (let i = 0; i < count; i++) {
+      // Distribute hues across the spectrum relative to base, ensuring variety
+      // Mix of analogous (nearby) and complementary (opposite) colors
+      const hueOffset = (i * 60) + Math.floor(Math.random() * 60) - 30; 
+      const hue = (baseHue + hueOffset + 360) % 360;
+      
+      const saturation = 65 + Math.floor(Math.random() * 35); // 65-100% - keep it vibrant
+      const lightness = 45 + Math.floor(Math.random() * 35); // 45-80% - avoid too dark/light
+      const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      
+      layers.push({
+        x: Math.floor(Math.random() * 80) - 10,
+        y: Math.floor(Math.random() * 80) - 10,
+        size: 40 + Math.floor(Math.random() * 40),
+        color
+      });
+    }
+    return layers;
+  }, []);
+
   const generateBackgroundColor = () => {
     const hue = Math.floor(Math.random() * 360)
-    const saturation = Math.floor(Math.random() * 30) + 70 // 70-100%
-    const lightness = Math.floor(Math.random() * 20) + 70 // 70-90%
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`
-  }
-
-  const regenerateSingleColor = (index: number) => {
-    const hue = Math.floor(Math.random() * 360)
-    const saturation = Math.floor(Math.random() * 40) + 60 // 60-100%
-    const lightness = Math.floor(Math.random() * 30) + 40 // 40-70%
-    setColorTheme(prev => ({ ...prev, [index]: `hsl(${hue}, ${saturation}%, ${lightness}%)` }))
+    return `hsl(${hue}, 0%, 95%)` // Tech minimal: very light gray
   }
 
   const generatePositions = useCallback((count: number) => {
@@ -70,65 +88,90 @@ export default function Faviconir() {
     switch (shape) {
       case 'circle':
         return `<circle cx="${x + size / 2}" cy="${y + size / 2}" r="${size / 2}" fill="${color}" />`
-      case 'square':
-        return `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${color}" />`
       case 'emoji':
         // Encode the emoji for use in SVG
-        const encodedEmoji = emoji.codePointAt(0).toString(16);
-        return `<text x="${x + size / 2}" y="${y + size / 2}" font-size="${size}" text-anchor="middle" dominant-baseline="central" transform="rotate(${angle}, ${x + size / 2}, ${y + size / 2})">&#x${encodedEmoji};</text>`
+        const encodedEmoji = emoji.codePointAt(0)?.toString(16) || '';
+        const filterAttr = emojiFilter ? 'filter="url(#grayscale)"' : '';
+        return `<text x="${x + size / 2}" y="${y + size / 2}" font-size="${size}" text-anchor="middle" dominant-baseline="central" transform="rotate(${angle}, ${x + size / 2}, ${y + size / 2})" ${filterAttr}>&#x${encodedEmoji};</text>`
+      case 'shader':
+          return '';
     }
   }
 
   const drawFavicon = useCallback(() => {
     let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">`
 
+    // Add definitions
+    svgContent += `<defs>`
+    
+    // Clip path definition
     if (clipPath !== 'none') {
-      svgContent += `<defs><clipPath id="favicon-clip">`;
+      svgContent += `<clipPath id="favicon-clip">`;
       if (clipPath === 'circle') {
         svgContent += `<circle cx="32" cy="32" r="31" />`;
       } else {
-        svgContent += `<rect x="1" y="1" width="62" height="62" rx="2" ry="2" />`;
+        svgContent += `<rect x="1" y="1" width="62" height="62" rx="0" ry="0" />`; // sharp corners
       }
-      svgContent += `</clipPath></defs>`;
+      svgContent += `</clipPath>`;
     }
+
+    // Grayscale filter definition
+    if (emojiFilter) {
+      svgContent += `<filter id="grayscale"><feColorMatrix type="matrix" values="0.3333 0.3333 0.3333 0 0 0.3333 0.3333 0.3333 0 0 0.3333 0.3333 0.3333 0 0 0 0 0 1 0"/></filter>`
+    }
+    
+    // Blur filter for shader
+    if (shape === 'shader') {
+         svgContent += `<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="10" /></filter>`
+    }
+
+    svgContent += `</defs>`
 
     svgContent += `<g ${clipPath !== 'none' ? 'clip-path="url(#favicon-clip)"' : ''}>`;
 
-    // Use the background color from colorTheme[2]
-    svgContent += `<rect width="64" height="64" fill="${colorTheme[2]}" />`;
-
-    const colors = [colorTheme[0], colorTheme[1]];
-    if (itemCount === 1 && shape === 'emoji') {
-      // Single emoji in the center
-      const pos = positions[0];
-      svgContent += drawShape(pos.x, pos.y, pos.size, '', selectedEmoji, pos.angle)
+    // Background
+    if (shape === 'shader') {
+        // For shader, use a solid base
+         svgContent += `<rect width="64" height="64" fill="#ffffff" />`;
+         shaderLayers.forEach(layer => {
+             svgContent += `<circle cx="${layer.x}" cy="${layer.y}" r="${layer.size}" fill="${layer.color}" filter="url(#blur)" opacity="0.8" />`
+         });
     } else {
-      positions.forEach((pos, i) => {
-        const color = colors[i % colors.length]
-        svgContent += drawShape(pos.x, pos.y, pos.size, color, selectedEmoji, pos.angle)
-      })
+        // Use the background color from colorTheme[2]
+        svgContent += `<rect width="64" height="64" fill="${colorTheme[2]}" />`;
+
+        const colors = [colorTheme[0], colorTheme[1]];
+        if (itemCount === 1 && shape === 'emoji') {
+        // Single emoji in the center
+        const pos = positions[0];
+        if (pos) {
+            svgContent += drawShape(pos.x, pos.y, pos.size, '', selectedEmoji, pos.angle)
+        }
+        } else {
+        positions.forEach((pos, i) => {
+            const color = colors[i % colors.length]
+            svgContent += drawShape(pos.x, pos.y, pos.size, color, selectedEmoji, pos.angle)
+        })
+        }
     }
 
     svgContent += `</g></svg>`
     setFaviconContent(svgContent)
     return svgContent
-  }, [positions, shape, colorTheme, selectedEmoji, itemCount, clipPath])
+  }, [positions, shape, colorTheme, selectedEmoji, itemCount, clipPath, emojiFilter, shaderLayers])
 
   const updatePageFavicon = useCallback((svgContent: string) => {
     const blob = new Blob([svgContent], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
-    const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+    const link = (document.querySelector("link[rel*='icon']") as HTMLLinkElement) || document.createElement('link');
     link.type = 'image/x-icon';
     link.rel = 'shortcut icon';
     link.href = url;
     document.getElementsByTagName('head')[0].appendChild(link);
     
-    toast({
-      title: "Favicon Updated",
-      description: "The page favicon has been updated with your design.",
-      duration: 3000,
-    })
-
+    // Toast notification is a bit distracting for minimal UI, maybe just update silently or small indicator?
+    // keeping it but minimalist style would be better.
+    
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }, []);
 
@@ -152,7 +195,7 @@ export default function Faviconir() {
       const ctx = canvas.getContext('2d')
       const img = new Image()
       img.onload = () => {
-        ctx.drawImage(img, 0, 0, 16, 16)
+        ctx?.drawImage(img, 0, 0, 16, 16)
         canvas.toBlob((blob) => {
           if (blob) {
             blob.arrayBuffer().then((buffer) => {
@@ -190,16 +233,9 @@ export default function Faviconir() {
               console.error('Error creating ICO file:', error);
               toast({
                 title: "Error",
-                description: "Failed to create ICO file. Please try again.",
+                description: "Failed to create ICO file.",
                 duration: 3000,
               });
-            });
-          } else {
-            console.error('Failed to create blob from canvas');
-            toast({
-              title: "Error",
-              description: "Failed to create ICO file. Please try again.",
-              duration: 3000,
             });
           }
         }, 'image/png')
@@ -209,44 +245,37 @@ export default function Faviconir() {
   }, [faviconContent, downloadFormat])
 
   const randomizeAll = () => {
-    setItemCount(Math.floor(Math.random() * 9) + 1)
-    const shapes: Shape[] = ['emoji', 'circle', 'square']
-    setShape(shapes[Math.floor(Math.random() * shapes.length)])
+    const shapes: Shape[] = ['emoji', 'circle', 'shader']
+    const newShape = shapes[Math.floor(Math.random() * shapes.length)];
+    setShape(newShape)
+    
+    if (newShape === 'shader') {
+        setShaderLayers(generateShaderLayers());
+        setItemCount(1); // Not used for shader, but good to reset
+    } else {
+        setItemCount(Math.floor(Math.random() * 9) + 1)
+        setPositions(generatePositions(itemCount))
+    }
+
     setSelectedEmoji(emojiOptions[Math.floor(Math.random() * emojiOptions.length)])
-    const newTheme = {}
+    const newTheme: any = {}
     for (let i = 0; i < 3; i++) {
       if (i === 2) {
-        newTheme[i] = generateBackgroundColor()
+        newTheme[i] = '#ffffff' // Always white bg for minimal
       } else {
-        const hue = Math.floor(Math.random() * 360)
-        const saturation = Math.floor(Math.random() * 40) + 60 // 60-100%
-        const lightness = Math.floor(Math.random() * 30) + 40 // 40-70%
-        newTheme[i] = `hsl(${hue}, ${saturation}%, ${lightness}%)`
+        const gray = Math.floor(Math.random() * 200)
+        newTheme[i] = `rgb(${gray}, ${gray}, ${gray})`
       }
     }
     setColorTheme(newTheme)
     setClipPath(['none', 'circle', 'square'][Math.floor(Math.random() * 3)] as ClipPath)
-    setPositions(generatePositions(itemCount))
   }
 
   useEffect(() => {
-    const newTheme = {}
-    for (let i = 0; i < 3; i++) {
-      if (i === 2) {
-        newTheme[i] = generateBackgroundColor()
-      } else {
-        const hue = Math.floor(Math.random() * 360)
-        const saturation = Math.floor(Math.random() * 40) + 60 // 60-100%
-        const lightness = Math.floor(Math.random() * 30) + 40 // 40-70%
-        newTheme[i] = `hsl(${hue}, ${saturation}%, ${lightness}%)`
-      }
-    }
-    setColorTheme(newTheme)
-  }, [])
-
-  useEffect(() => {
+    // Initial random state but controlled
     setPositions(generatePositions(itemCount))
-  }, [itemCount, generatePositions, shape])
+    setShaderLayers(generateShaderLayers())
+  }, [itemCount, generatePositions, shape, generateShaderLayers])
 
   useEffect(() => {
     const newSvgContent = drawFavicon()
@@ -288,231 +317,241 @@ export default function Faviconir() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="container mx-auto px-4 py-12 max-w-5xl">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-4xl font-bold text-[#5D4037]">Faviconir</h1>
+    <div className="min-h-screen bg-white text-black font-sans">
+      <div className="container mx-auto px-4 py-12 max-w-6xl">
+        <header className="flex items-center justify-between mb-12 border-b border-black pb-4">
+          <h1 className="text-3xl font-mono font-bold tracking-tighter uppercase">Faviconir_</h1>
           <a
             href="https://github.com/huozhi/faviconir"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[#5D4037] hover:text-[#3E2723]"
+            className="text-black hover:bg-black hover:text-white px-2 py-1 transition-colors font-mono text-sm"
           >
-            <Github className="w-6 h-6" />
+            GH_SOURCE
           </a>
-        </div>
-        <p className="text-[#5D4037] mb-8">Generate beautiful favicons with customizable shapes and colors</p>
+        </header>
 
-        <div className="bg-[#E0E0E0] text-[#424242] p-4 rounded-lg mb-8">
-          <p>Create unique favicons by adjusting the number of items, shapes, colors, and background styles. Download in SVG or ICO format.</p>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="w-full md:w-1/3 space-y-6">
-            <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-lg shadow-sm">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="shape" className="text-sm font-medium text-[#5D4037]">Shape</Label>
-                  <div className="flex gap-2 mt-2">
-                    <div className="relative">
-                      <Button
-                        onClick={() => {
-                          setShape('emoji');
-                          setEmojiSelectorOpen(!emojiSelectorOpen);
-                        }}
-                        variant={shape === 'emoji' ? 'default' : 'outline'}
-                        className="w-10 h-10 p-0"
-                      >
-                        {selectedEmoji}
-                      </Button>
-                      {emojiSelectorOpen && shape === 'emoji' && (
-                        <div ref={emojiSelectorRef} className="absolute top-full left-0 mt-1 w-48 p-2 bg-white rounded-md shadow-lg z-10">
-                          <div className="grid grid-cols-4 gap-2 mb-2">
-                            {emojiOptions.map((emoji) => (
-                              <div
-                                key={emoji}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEmojiSelect(emoji);
-                                }}
-                                className="h-8 w-8 p-0 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded"
-                              >
-                                {emoji}
-                              </div>
-                            ))}
-                          </div>
-                          <form onSubmit={handleCustomEmojiSubmit} className="mt-2">
-                            <Input
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
+          {/* Controls Section */}
+          <div className="md:col-span-4 space-y-8">
+            <div className="space-y-6 border border-black p-6 bg-white">
+              <div className="space-y-2">
+                <Label className="font-mono text-xs uppercase tracking-wider text-gray-500">Shape</Label>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                        setShape('shader');
+                        setShaderLayers(generateShaderLayers());
+                    }}
+                    variant="outline"
+                    className={`h-10 w-10 p-0 border-black rounded-none ${shape === 'shader' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+                    title="Shader Abstract"
+                  >
+                    <Zap className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShape('emoji');
+                      setEmojiSelectorOpen(!emojiSelectorOpen);
+                    }}
+                    variant="outline"
+                    className={`h-10 w-10 p-0 border-black rounded-none ${shape === 'emoji' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+                    data-shape="emoji"
+                  >
+                    {selectedEmoji}
+                  </Button>
+                  {emojiSelectorOpen && (
+                    <div ref={emojiSelectorRef} className="absolute mt-12 ml-12 w-48 p-2 bg-white border border-black z-10">
+                       <div className="grid grid-cols-4 gap-2 mb-2">
+                          {emojiOptions.map((emoji) => (
+                            <div
+                              key={emoji}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEmojiSelect(emoji);
+                              }}
+                              className="h-8 w-8 p-0 flex items-center justify-center cursor-pointer hover:bg-gray-100"
+                            >
+                              {emoji}
+                            </div>
+                          ))}
+                        </div>
+                        <form onSubmit={handleCustomEmojiSubmit}>
+                           <Input
                               type="text"
-                              placeholder="Custom emoji"
+                              placeholder="Custom"
                               value={customEmoji}
                               onChange={(e) => setCustomEmoji(e.target.value)}
-                              className="mb-2"
-                              onClick={(e) => e.stopPropagation()}
+                              className="mb-2 h-8 text-sm border-black rounded-none"
                             />
-                            <Button type="submit" className="w-full" onClick={(e) => e.stopPropagation()}>
-                              Add Custom Emoji
-                            </Button>
-                          </form>
-                        </div>
-                      )}
+                            <Button type="submit" className="w-full h-8 text-xs bg-black text-white rounded-none hover:bg-gray-800">ADD</Button>
+                        </form>
                     </div>
+                  )}
+                  <Button
+                    onClick={() => setShape('circle')}
+                    variant="outline"
+                    className={`h-10 w-10 p-0 border-black rounded-none ${shape === 'circle' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+                  >
+                    <Circle className="h-4 w-4" />
+                  </Button>
+                  {shape === 'emoji' && (
                     <Button
-                      onClick={() => setShape('circle')}
-                      variant={shape === 'circle' ? 'default' : 'outline'}
-                      className="w-10 h-10 p-0 rounded-full"
+                        onClick={() => setEmojiFilter(!emojiFilter)}
+                        variant="outline"
+                        className={`h-10 px-2 border-black rounded-none font-mono text-[10px] uppercase ${emojiFilter ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+                        title="Toggle Grayscale"
                     >
-                      ⭕
+                        Mono
                     </Button>
-                    <Button
-                      onClick={() => setShape('square')}
-                      variant={shape === 'square' ? 'default' : 'outline'}
-                      className="w-10 h-10 p-0"
-                    >
-                      ⬜
-                    </Button>
-                  </div>
+                  )}
                 </div>
+              </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="item-count" className="text-sm font-medium text-[#5D4037]">Amount</Label>
-                    <Input
-                      id="item-count"
-                      type="number"
-                      min={1}
-                      max={9}
-                      value={itemCount}
-                      onChange={(e) => setItemCount(Math.max(1, Math.min(9, parseInt(e.target.value) || 1)))}
-                      className="w-16 text-center"
-                    />
-                  </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="font-mono text-xs uppercase tracking-wider text-gray-500">Count</Label>
+                  <span className="font-mono text-sm">{itemCount}</span>
                 </div>
+                <Input
+                    type="range"
+                    min={1}
+                    max={9}
+                    value={itemCount}
+                    onChange={(e) => setItemCount(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-none appearance-none cursor-pointer accent-black border-none p-0"
+                />
+              </div>
 
+              <div className={`space-y-2 ${shape === 'shader' ? 'opacity-30 pointer-events-none' : ''}`}>
+                <Label className="font-mono text-xs uppercase tracking-wider text-gray-500">Colors</Label>
+                <div className="flex gap-2">
+                  {[0, 1, 2].map((index) => (
+                    <div key={index} className="flex flex-col items-center gap-1">
+                        <button
+                            className="w-8 h-8 border border-black focus:outline-none"
+                            style={{ backgroundColor: colorTheme[index] }}
+                            onClick={() => {
+                            setColorPickerIndex(index);
+                            setColorPickerOpen(true);
+                            }}
+                        />
+                        <span className="text-[10px] font-mono text-gray-400">{index === 2 ? 'BG' : `C${index+1}`}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-                <div>
-                  <Label htmlFor="color-theme" className="text-sm font-medium text-[#5D4037] mb-2 block">
-                    Color Theme
-                  </Label>
+               <div className="space-y-2">
+                  <Label className="font-mono text-xs uppercase tracking-wider text-gray-500">Clip</Label>
                   <div className="flex gap-2">
-                    {[0, 1].map((index) => (
-                      <button
-                        key={index}
-                        className="w-8 h-8 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#757575] border border-white"
-                        style={{ backgroundColor: colorTheme[index] }}
-                        onClick={() => {
-                          setColorPickerIndex(index);
-                          setColorPickerOpen(true);
-                        }}
-                        aria-label={`Change theme color ${index + 1}`}
-                      />
-                    ))}
-                    <div className="flex-grow"></div>
-                    <button
-                      className="w-8 h-8 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#757575]"
-                      style={{ backgroundColor: colorTheme[2] }}
-                      onClick={() => {
-                        setColorPickerIndex(2);
-                        setColorPickerOpen(true);
-                      }}
-                      aria-label="Change background color"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="background" className="text-sm font-medium text-[#5D4037] mb-2 block">
-                    Clip Path
-                  </Label>
-                  <div className="flex gap-1">
-                    <Button
-                      onClick={() => setClipPath('circle')}
-                      variant={clipPath === 'circle' ? 'default' : 'outline'}
-                      size="icon"
-                      className="w-8 h-8 rounded-full"
-                    >
-                      <Circle className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      onClick={() => setClipPath('square')}
-                      variant={clipPath === 'square' ? 'default' : 'outline'}
-                      size="icon"
-                      className="w-8 h-8"
-                    >
-                      <Square className="h-4 w-4" />
-                    </Button>
                     <Button
                       onClick={() => setClipPath('none')}
-                      variant={clipPath === 'none' ? 'default' : 'outline'}
-                      size="icon"
-                      className="w-8 h-8"
+                      variant="outline"
+                      className={`h-8 w-8 p-0 border-black rounded-none ${clipPath === 'none' ? 'bg-black text-white' : ''}`}
                     >
                       <X className="h-4 w-4" />
                     </Button>
+                    <Button
+                      onClick={() => setClipPath('circle')}
+                      variant="outline"
+                      className={`h-8 w-8 p-0 border-black rounded-none ${clipPath === 'circle' ? 'bg-black text-white' : ''}`}
+                    >
+                      <Circle className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      onClick={() => setClipPath('square')}
+                      variant="outline"
+                      className={`h-8 w-8 p-0 border-black rounded-none ${clipPath === 'square' ? 'bg-black text-white' : ''}`}
+                    >
+                       <Square className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={() => setPositions(generatePositions(itemCount))} className="flex-1 bg-[#9E9E9E] text-[#424242] hover:bg-[#757575]">
-                    Reposition
-                  </Button>
-                  <Button onClick={randomizeAll} className="flex-1 bg-[#9E9E9E] text-[#424242] hover:bg-[#757575]">
-                    Randomize All
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Select value={downloadFormat} onValueChange={(value: DownloadFormat) => setDownloadFormat(value)}>
-                    <SelectTrigger id="download-format" className="w-full">
-                      <SelectValue placeholder="Select format" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="svg">SVG</SelectItem>
-                      <SelectItem value="ico">ICO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    onClick={downloadFavicon} 
-                    disabled={!faviconContent}
-                    className="w-10 h-10 p-0 bg-[#757575] text-white hover:bg-[#616161] disabled:bg-gray-400"
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                  <Button 
+                    onClick={() => {
+                        if (shape === 'shader') {
+                            setShaderLayers(generateShaderLayers());
+                        } else {
+                            setPositions(generatePositions(itemCount))
+                        }
+                    }} 
+                    variant="outline" 
+                    className="border-black text-black rounded-none hover:bg-black hover:text-white font-mono text-xs h-10 uppercase"
+                  >
+                    {shape === 'shader' ? 'Regenerate' : 'Reposition'}
+                  </Button>
+                  <Button onClick={randomizeAll} variant="outline" className="border-black text-black rounded-none hover:bg-black hover:text-white font-mono text-xs h-10 uppercase">
+                    Randomize
+                  </Button>
+             </div>
           </div>
 
-          <div className="w-full md:w-2/3 flex flex-col items-center justify-center">
+          {/* Preview Section */}
+          <div className="md:col-span-8 flex flex-col items-center justify-center bg-gray-50 border border-dashed border-gray-300 relative h-[600px]">
+            <div className="absolute top-4 left-4 font-mono text-xs text-gray-400 uppercase tracking-widest">Preview Area</div>
+            
             <div 
-              className="w-72 h-72 bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-lg mb-4 flex items-center justify-center overflow-hidden cursor-pointer p-8"
-              style={{ boxShadow: '0 4px 14px rgba(0, 0, 0, 0.1)' }}
-              aria-label="Favicon preview"
+              className="w-64 h-64 bg-white border border-black shadow-none flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
               onClick={downloadFavicon}
             >
               <div 
-                dangerouslySetInnerHTML={{ __html: faviconContent.replace('width="64" height="64"', 'width="224" height="224"') }}
-                className="w-full h-full"
+                dangerouslySetInnerHTML={{ __html: faviconContent.replace('width="64" height="64"', 'width="200" height="200"') }}
+                className="w-full h-full p-4 flex items-center justify-center"
               />
+            </div>
+
+            <div className="mt-8 flex gap-4 items-center w-full max-w-xs">
+                <div className="flex border border-black">
+                   <button
+                      onClick={() => setDownloadFormat('svg')}
+                      className={`px-3 py-2 font-mono text-xs uppercase transition-colors ${downloadFormat === 'svg' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                   >
+                      SVG
+                   </button>
+                   <button
+                      onClick={() => setDownloadFormat('ico')}
+                      className={`px-3 py-2 font-mono text-xs uppercase transition-colors border-l border-black ${downloadFormat === 'ico' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                   >
+                      ICO
+                   </button>
+                </div>
+                  <Button 
+                    onClick={downloadFavicon} 
+                    className="flex-1 h-9 bg-black text-white rounded-none hover:bg-gray-800 font-mono text-xs uppercase tracking-wider"
+                  >
+                    Download
+                  </Button>
             </div>
           </div>
         </div>
       </div>
+
       {colorPickerOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div ref={colorPickerRef} className="bg-white p-4 rounded-lg">
+        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setColorPickerOpen(false)}>
+          <div 
+            ref={colorPickerRef} 
+            className="bg-white p-4 border border-black shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <HexColorPicker 
               color={colorTheme[colorPickerIndex]} 
               onChange={(color) => {
                 setColorTheme(prev => ({ ...prev, [colorPickerIndex]: color }));
               }} 
             />
-            <Button onClick={() => setColorPickerOpen(false)} className="mt-4 w-full">
-              Close
-            </Button>
+             <div className="mt-4 flex justify-between items-center">
+                <span className="font-mono text-xs uppercase">{colorTheme[colorPickerIndex]}</span>
+                <Button onClick={() => setColorPickerOpen(false)} size="sm" className="bg-black text-white rounded-none h-8 text-xs">
+                  DONE
+                </Button>
+            </div>
           </div>
         </div>
       )}
     </div>
   )
 }
-
