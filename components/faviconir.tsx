@@ -24,6 +24,7 @@ export default function Faviconir() {
     2: '#ffffff' // Background
   })
   const [faviconContent, setFaviconContent] = useState<string>('')
+  const [ogImageContent, setOgImageContent] = useState<string>('')
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>('svg')
   const [positions, setPositions] = useState<Array<{x: number, y: number, size: number, angle: number}>>([])
   const [selectedEmoji, setSelectedEmoji] = useState<string>('😊');
@@ -112,8 +113,14 @@ export default function Faviconir() {
     }
     
     // Blur filter for shader
+    // Re-using the same filter ID might cause issues if we display both SVGs on page, 
+    // but they are isolated by shadow DOM in some contexts, here they are raw HTML strings.
+    // We should namespace IDs if we want to be safe, but for now standard IDs are okay 
+    // as they are scoped to the SVG document if used as an image source, 
+    // but here we are embedding SVG inline.
+    // Let's use unique IDs for filters to avoid conflicts between favicon and OG image if rendered together.
     if (shape === 'shader') {
-         svgContent += `<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="10" /></filter>`
+         svgContent += `<filter id="blur-favicon" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="10" /></filter>`
     }
 
     svgContent += `</defs>`
@@ -125,7 +132,7 @@ export default function Faviconir() {
         // For shader, use a solid base
          svgContent += `<rect width="64" height="64" fill="#ffffff" />`;
          shaderLayers.forEach(layer => {
-             svgContent += `<circle cx="${layer.x}" cy="${layer.y}" r="${layer.size}" fill="${layer.color}" filter="url(#blur)" opacity="0.8" />`
+             svgContent += `<circle cx="${layer.x}" cy="${layer.y}" r="${layer.size}" fill="${layer.color}" filter="url(#blur-favicon)" opacity="0.8" />`
          });
     } else {
         // Use the background color from colorTheme[2]
@@ -150,6 +157,43 @@ export default function Faviconir() {
     setFaviconContent(svgContent)
     return svgContent
   }, [positions, shape, colorTheme, selectedEmoji, itemCount, clipPath, emojiFilter, shaderLayers])
+
+  const drawOgImage = useCallback(() => {
+    // OG Image typically 1200x630, but we can generate a smaller preview and scale
+    // Let's make a square-ish abstract art based on the shader layers but scaled up
+    // or just a different aspect ratio version of the shader.
+    // User asked for "random shader rendering", imply using the current shader layers but maybe different layout?
+    // Or just the SAME shader style but applied to a larger canvas.
+    
+    // Let's go with 1200x630 viewbox for standard OG
+    let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">`
+    
+    svgContent += `<defs>`
+    svgContent += `<filter id="blur-og" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="80" /></filter>`
+    svgContent += `</defs>`
+
+    // White background base
+    svgContent += `<rect width="1200" height="630" fill="#ffffff" />`
+
+    // Re-use shader layers but scale positions to cover the larger area
+    // Original shader layers are on 64x64 grid.
+    // We need to map 0..64 to 0..1200 (x) and 0..630 (y)
+    
+    // To make it look "random" but consistent with the favicon's theme, 
+    // we can use the same layers but scale them up massively.
+    
+    shaderLayers.forEach(layer => {
+        // Scale factor roughly 20x
+        const cx = layer.x * 18.75; // 1200 / 64
+        const cy = layer.y * 9.84;  // 630 / 64
+        const r = layer.size * 15;  // Scale radius up
+        
+        svgContent += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${layer.color}" filter="url(#blur-og)" opacity="0.8" />`
+    });
+
+    svgContent += `</svg>`
+    setOgImageContent(svgContent)
+  }, [shaderLayers])
 
   const updatePageFavicon = useCallback((svgContent: string) => {
     const blob = new Blob([svgContent], { type: 'image/svg+xml' });
@@ -235,6 +279,19 @@ export default function Faviconir() {
     }
   }, [faviconContent, downloadFormat])
 
+  const downloadOgImage = useCallback(() => {
+    if (!ogImageContent) return;
+    const svgBlob = new Blob([ogImageContent], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'og-image.svg'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }, [ogImageContent]);
+
   const randomizeAll = () => {
     const shapes: Shape[] = ['emoji', 'circle', 'shader']
     const newShape = shapes[Math.floor(Math.random() * shapes.length)];
@@ -272,7 +329,8 @@ export default function Faviconir() {
     const newSvgContent = drawFavicon()
     setFaviconContent(newSvgContent)
     updatePageFavicon(newSvgContent)
-  }, [drawFavicon, updatePageFavicon])
+    drawOgImage()
+  }, [drawFavicon, updatePageFavicon, drawOgImage])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -324,7 +382,7 @@ export default function Faviconir() {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
           {/* Controls Section */}
-          <div className="md:col-span-4 space-y-8">
+          <div className="md:col-span-4 space-y-8 mt-8">
             <div className="space-y-6 border border-black p-6 bg-white">
               <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-gray-500">Shape</Label>
@@ -482,40 +540,68 @@ export default function Faviconir() {
           </div>
 
           {/* Preview Section */}
-          <div className="md:col-span-8 flex flex-col items-center justify-center bg-gray-50 border border-dashed border-gray-300 relative h-[600px]">
-            <div className="absolute top-4 left-4 font-mono text-xs text-gray-400 uppercase tracking-widest">Preview Area</div>
+          <div className="md:col-span-8 flex flex-col relative overflow-y-auto">
             
-            <div 
-              className="w-64 h-64 bg-white border border-black shadow-none flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
-              onClick={downloadFavicon}
-            >
-              <div 
-                dangerouslySetInnerHTML={{ __html: faviconContent.replace('width="64" height="64"', 'width="200" height="200"') }}
-                className="w-full h-full p-4 flex items-center justify-center"
-              />
-            </div>
-
-            <div className="mt-8 flex gap-4 items-center w-full max-w-xs">
-                <div className="flex border border-black">
-                   <button
-                      onClick={() => setDownloadFormat('svg')}
-                      className={`px-3 py-2 font-mono text-xs uppercase transition-colors ${downloadFormat === 'svg' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
-                   >
-                      SVG
-                   </button>
-                   <button
-                      onClick={() => setDownloadFormat('ico')}
-                      className={`px-3 py-2 font-mono text-xs uppercase transition-colors border-l border-black ${downloadFormat === 'ico' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
-                   >
-                      ICO
-                   </button>
+            <div className="flex flex-col gap-12 w-full">
+                {/* Icon Preview */}
+                <div className="flex flex-col items-start gap-4">
+                    <Label className="font-mono text-xs uppercase tracking-wider text-gray-400">Favicon</Label>
+                    <div className="flex flex-col sm:flex-row gap-8 items-start">
+                        <div 
+                            className="w-48 h-48 bg-white border border-black shadow-none flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={downloadFavicon}
+                        >
+                            <div 
+                                dangerouslySetInnerHTML={{ __html: faviconContent.replace('width="64" height="64"', 'width="160" height="160"') }}
+                                className="w-full h-full p-4 flex items-center justify-center"
+                            />
+                        </div>
+                        
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-2">
+                                <div className="flex border border-black w-fit">
+                                    <button
+                                        onClick={() => setDownloadFormat('svg')}
+                                        className={`px-3 py-2 font-mono text-xs uppercase transition-colors ${downloadFormat === 'svg' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                                    >
+                                        SVG
+                                    </button>
+                                    <button
+                                        onClick={() => setDownloadFormat('ico')}
+                                        className={`px-3 py-2 font-mono text-xs uppercase transition-colors border-l border-black ${downloadFormat === 'ico' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                                    >
+                                        ICO
+                                    </button>
+                                </div>
+                            </div>
+                            <Button 
+                                onClick={downloadFavicon} 
+                                className="h-9 bg-black text-white rounded-none hover:bg-gray-800 font-mono text-xs uppercase tracking-wider w-32"
+                            >
+                                Download
+                            </Button>
+                        </div>
+                    </div>
                 </div>
-                  <Button 
-                    onClick={downloadFavicon} 
-                    className="flex-1 h-9 bg-black text-white rounded-none hover:bg-gray-800 font-mono text-xs uppercase tracking-wider"
-                  >
-                    Download
-                  </Button>
+
+                {/* OG Image Preview */}
+                <div className="flex flex-col items-start gap-4 w-full max-w-2xl">
+                    <Label className="font-mono text-xs uppercase tracking-wider text-gray-400">OG Image</Label>
+                    <div 
+                        className="w-full aspect-[1.91/1] bg-white border border-black shadow-none overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                    >
+                        <div 
+                            dangerouslySetInnerHTML={{ __html: ogImageContent.replace('width="1200" height="630"', 'width="100%" height="100%"') }}
+                            className="w-full h-full"
+                        />
+                    </div>
+                    <Button 
+                        onClick={downloadOgImage} 
+                        className="h-9 bg-black text-white rounded-none hover:bg-gray-800 font-mono text-xs uppercase tracking-wider w-32"
+                    >
+                        Download
+                    </Button>
+                </div>
             </div>
           </div>
         </div>
